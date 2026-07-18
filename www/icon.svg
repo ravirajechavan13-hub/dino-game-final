@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="360" cy="120" r="42" fill="#fef3c7"/>
+  <rect x="0" y="360" width="512" height="152" fill="#78350f"/>
+  <rect x="0" y="360" width="512" height="8" fill="#fbbf24"/>
+  <g transform="translate(120 170)">
+    <path d="M20 120 C0 100 -20 90 -40 100 C-20 130 10 140 30 140 Z" fill="#4ade80"/>
+    <rect x="30" y="90" width="110" height="90" rx="28" fill="#4ade80"/>
+    <rect x="55" y="125" width="55" height="40" rx="16" fill="#bbf7d0"/>
+    <rect x="90" y="30" width="120" height="95" rx="30" fill="#4ade80"/>
+    <rect x="180" y="70" width="40" height="35" rx="12" fill="#4ade80"/>
+    <circle cx="165" cy="65" r="16" fill="#fff"/>
+    <circle cx="169" cy="67" r="8" fill="#14532d"/>
+    <circle cx="171" cy="65" r="3" fill="#fff"/>
+    <path d="M60 90 L80 40 L100 90 Z" fill="#16a34a"/>
+    <path d="M100 70 L120 20 L140 70 Z" fill="#16a34a"/>
+    <path d="M140 40 L155 5 L170 40 Z" fill="#16a34a"/>
+    <rect x="50" y="170" width="34" height="50" rx="10" fill="#15803d"/>
+    <rect x="105" y="170" width="34" height="40" rx="10" fill="#15803d"/>
+  </g>
+  <circle cx="390" cy="300" r="28" fill="#fbbf24"/>
+  <circle cx="390" cy="300" r="16" fill="#f59e0b"/>
+  <text x="390" y="307" text-anchor="middle" font-size="18" font-family="Arial Black, sans-serif" fill="#78350f">S</text>
+</svg>
