@@ -10,8 +10,8 @@
   <meta name="application-name" content="Dino Run">
   <meta name="description" content="Endless desert dino runner with power coins, combos and missions.">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icon-192.png">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Dino Run — Endless</title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <style>
@@ -252,6 +252,7 @@
       margin-bottom: 10px;
       filter: drop-shadow(0 10px 20px rgba(74, 222, 128, 0.35));
       animation: floaty 1.2s ease-in-out infinite alternate;
+      border-radius: 20px;
     }
     @keyframes floaty {
       from { transform: translateY(0); }
@@ -384,7 +385,6 @@
       box-shadow: 0 8px 0 #0f172a;
     }
 
-    /* Tutorial popup */
     .howto {
       position: absolute;
       inset: 0;
@@ -473,8 +473,6 @@
       color: #fde68a;
     }
     .pad span.icon { font-size: 20px; line-height: 1; }
-
-    
 
     .progress {
       position: absolute;
@@ -587,9 +585,8 @@
       <button class="pad" id="jumpBtn" type="button"><span class="icon">⬆</span>JUMP</button>
     </div>
 
-    <!-- Start / Game Over overlay -->
     <div class="overlay" id="overlay">
-      <canvas class="logo-dino" id="logoDino" width="100" height="100"></canvas>
+      <img class="logo-dino" id="logoDino" src="icons/icon-192.png" alt="Dino Run">
       <h1 id="overlayTitle">DINO RUN</h1>
       <p id="overlaySub">Color coins = different powers<br>Learn them before you run</p>
 
@@ -612,7 +609,7 @@
           <div class="coin-visual gr">G</div>
           <div class="coin-info">
             <strong>GRASS = RARE BOOST</strong>
-            <span>Rare ground grass power. Super score boost + soft slow.</span>
+            <span>Rare ground grass power. Big score burst + mild slow.</span>
           </div>
         </div>
       </div>
@@ -628,7 +625,6 @@
       <button class="cta secondary" id="howtoBtn" type="button">❓ COIN GUIDE</button>
     </div>
 
-    <!-- Popup tutorial -->
     <div class="howto" id="howto">
       <div class="howto-card">
         <h2>COIN POWER GUIDE</h2>
@@ -673,7 +669,7 @@
   <script>
     const phone = document.getElementById('phone');
     const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     const overlay = document.getElementById('overlay');
     const overlayTitle = document.getElementById('overlayTitle');
     const overlaySub = document.getElementById('overlaySub');
@@ -704,8 +700,6 @@
     const howtoPlayBtn = document.getElementById('howtoPlayBtn');
     const howtoCloseBtn = document.getElementById('howtoCloseBtn');
     const muteBtn = document.getElementById('muteBtn');
-    const logoCanvas = document.getElementById('logoDino');
-    const logoCtx = logoCanvas.getContext('2d');
 
     const BASE_W = 360, BASE_H = 640;
     let W = BASE_W, H = BASE_H, GROUND_Y = 470;
@@ -714,20 +708,33 @@
     hiScoreEl.textContent = String(hiScore).padStart(5, '0');
     let seenGuide = localStorage.getItem('dinoCoinGuideSeen') === '1';
 
-    const MIN_SPEED = 4.0;
-    const MAX_SPEED = 14.5;
-    const BASE_SPEED = 5.1;
+    // ============================================================
+    // FIXED TIMESTEP CONSTANTS
+    // The simulation ALWAYS advances at exactly 60 ticks per second,
+    // no matter if the phone screen is 60Hz, 90Hz, 120Hz or 144Hz.
+    // requestAnimationFrame can fire at any of those rates for smooth
+    // rendering, but update() below only ever runs on a fixed clock,
+    // so gameplay speed is 100% identical across every device.
+    // ============================================================
+    const TARGET_FPS = 60;
+    const FIXED_DT_MS = 1000 / TARGET_FPS;
+    const MAX_STEPS_PER_FRAME = 5; // safety valve if the tab was paused
+    const STARTUP_GRACE_SEC = 3; // gentle ramp at the start of every run
+
+    const MIN_SPEED = 3.0;
+    const MAX_SPEED = 11.5;
+    const BASE_SPEED = 3.4;
     const BIRD_SAFE_GAP = 155;
     const GROUND_SAFE_GAP = 98;
     const COIN_SAFE_FROM_BIRD = 95;
 
     const PHASES = [
-      { at: 0,    name: 'WARMUP',        tag: 'PHASE 1', color: '#93c5fd', gapMul: 1.15, birdChance: 0.12, twinChance: 0.00, speedAdd: 0.12 },
-      { at: 250,  name: 'DESERT HEAT',   tag: 'PHASE 2', color: '#fbbf24', gapMul: 1.00, birdChance: 0.22, twinChance: 0.08, speedAdd: 0.16 },
-      { at: 600,  name: 'NIGHT STORM',   tag: 'PHASE 3', color: '#a78bfa', gapMul: 0.90, birdChance: 0.30, twinChance: 0.14, speedAdd: 0.20 },
-      { at: 1100, name: 'BONE VALLEY',   tag: 'PHASE 4', color: '#fb7185', gapMul: 0.82, birdChance: 0.36, twinChance: 0.20, speedAdd: 0.24 },
-      { at: 1800, name: 'METEOR RUN',    tag: 'PHASE 5', color: '#f97316', gapMul: 0.75, birdChance: 0.40, twinChance: 0.26, speedAdd: 0.28 },
-      { at: 2800, name: 'ENDLESS CHAOS', tag: 'PHASE ∞', color: '#f43f5e', gapMul: 0.68, birdChance: 0.45, twinChance: 0.32, speedAdd: 0.32 }
+      { at: 0,    name: 'WARMUP',        tag: 'PHASE 1', color: '#93c5fd', gapMul: 1.20, birdChance: 0.10, twinChance: 0.00, speedAdd: 0.08 },
+      { at: 250,  name: 'DESERT HEAT',   tag: 'PHASE 2', color: '#fbbf24', gapMul: 1.05, birdChance: 0.20, twinChance: 0.06, speedAdd: 0.11 },
+      { at: 600,  name: 'NIGHT STORM',   tag: 'PHASE 3', color: '#a78bfa', gapMul: 0.95, birdChance: 0.28, twinChance: 0.12, speedAdd: 0.14 },
+      { at: 1100, name: 'BONE VALLEY',   tag: 'PHASE 4', color: '#fb7185', gapMul: 0.86, birdChance: 0.34, twinChance: 0.18, speedAdd: 0.17 },
+      { at: 1800, name: 'METEOR RUN',    tag: 'PHASE 5', color: '#f97316', gapMul: 0.78, birdChance: 0.38, twinChance: 0.24, speedAdd: 0.20 },
+      { at: 2800, name: 'ENDLESS CHAOS', tag: 'PHASE ∞', color: '#f43f5e', gapMul: 0.72, birdChance: 0.42, twinChance: 0.28, speedAdd: 0.23 }
     ];
 
     const MISSION_POOL = [
@@ -739,24 +746,17 @@
       { type: 'survive', label: 'Survive SECS seconds', amount: 20 }
     ];
 
-    // Coin kinds: yellow slow, green shield, rare ground grass
     const COIN_TYPES = {
       slow: {
-        key: 'slow',
-        label: 'SLOW',
-        letter: 'S',
+        key: 'slow', label: 'SLOW', letter: 'S',
         colors: { glow: 'rgba(251,191,36,0.38)', outer: '#fbbf24', mid: '#f59e0b', core: '#fef3c7', text: '#92400e' }
       },
       shield: {
-        key: 'shield',
-        label: 'SHIELD',
-        letter: 'H',
+        key: 'shield', label: 'SHIELD', letter: 'H',
         colors: { glow: 'rgba(74,222,128,0.38)', outer: '#4ade80', mid: '#16a34a', core: '#dcfce7', text: '#14532d' }
       },
       grass: {
-        key: 'grass',
-        label: 'GRASS',
-        letter: 'G',
+        key: 'grass', label: 'GRASS', letter: 'G',
         colors: { glow: 'rgba(163,230,53,0.42)', outer: '#a3e635', mid: '#65a30d', core: '#ecfccb', text: '#365314' }
       }
     };
@@ -771,13 +771,13 @@
     let mult = 1;
     let speed = BASE_SPEED;
     let targetSpeed = BASE_SPEED;
-    let frame = 0;
-    let runFrames = 0;
+    let frame = 0;        // fixed-tick game clock (always advances at 60/sec)
+    let runFrames = 0;    // fixed-tick clock since run start
     let groundOffset = 0;
-    let stars = [], dunes = [], mountains = [], cactusBg = [], clouds = [];
+    let stars = [], dunes = [], mountains = [], cactusBg = [], clouds = [], grassTufts = [];
     let obstacles = [], particles = [], coins = [], floatTexts = [];
     let lastObstacleFrame = 0;
-    let nextObstacleGap = 105;
+    let nextObstacleGap = 120;
     let shake = 0;
     let floatTimer = 0;
     let phaseIdx = 0;
@@ -793,14 +793,18 @@
     let clearedIds = new Set();
     let nextId = 1;
 
+    // ---- fixed timestep loop state ----
+    let lastTs = 0;
+    let accumulator = 0;
+
     const dino = {
-      x: 56, y: 0, w: 54, h: 58,
+      x: 56, y: 0, w: 56, h: 60,
       vy: 0, jumping: false, ducking: false, dead: false,
       animTimer: 0, blinkTimer: 0, eyeClosed: false, squash: 1
     };
 
-    const GRAVITY = 0.74;
-    const JUMP_FORCE = -14;
+    const GRAVITY = 0.70;
+    const JUMP_FORCE = -13.2;
 
     // ---------- AUDIO ----------
     let audioCtx = null, masterGain = null;
@@ -873,7 +877,7 @@
     // ---------- HELPERS ----------
     function resize() {
       const rect = phone.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
       const scale = rect.width / BASE_W;
       canvas.width = Math.floor(rect.width * dpr);
       canvas.height = Math.floor(rect.height * dpr);
@@ -910,7 +914,6 @@
       if (combo >= 8) mult = 3;
       if (combo >= 14) mult = 4;
       if (combo >= 22) mult = 5;
-      // Grass boosts multiplier further
       if (frame < grassUntil) mult = Math.max(mult, 4);
       if (frame < grassUntil && combo >= 10) mult = Math.max(mult, 5);
       multValEl.textContent = String(mult);
@@ -938,7 +941,7 @@
         showPhaseBanner(p);
         sfx.phase();
         vibe(30);
-        targetSpeed = clamp(targetSpeed + 0.35, MIN_SPEED, MAX_SPEED);
+        targetSpeed = clamp(targetSpeed + 0.22, MIN_SPEED, MAX_SPEED);
         showFloat(p.tag + '<br>' + p.name, p.color);
       }
     }
@@ -958,7 +961,7 @@
     }
     function updateMissionUI() {
       if (!mission) return;
-      if (mission.type === 'survive') missionProgress = Math.floor((runFrames - mission.startTime) / 60);
+      if (mission.type === 'survive') missionProgress = Math.floor((runFrames - mission.startTime) / TARGET_FPS);
       else if (mission.type === 'score') missionProgress = Math.min(missionTarget, score - mission.startScore);
       missionText.textContent = mission.label + '  (' + Math.min(missionProgress, missionTarget) + '/' + missionTarget + ')';
       missionBar.style.width = clamp((missionProgress / missionTarget) * 100, 0, 100) + '%';
@@ -972,7 +975,6 @@
       showFloat('MISSION CLEAR<br>+' + bonus, '#93c5fd');
       score += bonus * mult;
       scoreEl.textContent = String(score).padStart(5, '0');
-      // mission reward coin-style power
       applyCoinPower(pick(['shield', 'slow', 'slow', 'grass']), true);
       targetSpeed = clamp(targetSpeed - 0.35, MIN_SPEED, MAX_SPEED);
       checkPhase();
@@ -981,24 +983,23 @@
 
     function applyCoinPower(kind, fromMission = false) {
       if (kind === 'slow') {
-        const slowAmount = 0.55 + Math.random() * 0.3;
+        const slowAmount = 0.70 + Math.random() * 0.35;
         targetSpeed = clamp(targetSpeed - slowAmount, MIN_SPEED, MAX_SPEED);
-        speed = clamp(speed - slowAmount * 0.5, MIN_SPEED, MAX_SPEED);
+        speed = clamp(speed - slowAmount * 0.65, MIN_SPEED, MAX_SPEED);
         updateSpeedUI();
         sfx.coinSlow();
         showFloat(fromMission ? 'MISSION · SLOW' : '🟡 SLOW SPEED', '#fbbf24');
       } else if (kind === 'shield') {
-        shield = 60 * 9;
+        shield = TARGET_FPS * 9;
         shieldChip.style.display = 'inline-block';
         sfx.coinShield();
         showFloat(fromMission ? 'MISSION · SHIELD' : '🟢 SHIELD ON', '#4ade80');
       } else if (kind === 'grass') {
-        grassUntil = frame + 60 * 8;
+        grassUntil = frame + TARGET_FPS * 8;
         combo = Math.max(combo, 12);
         comboCountEl.textContent = String(combo);
-        // mild slow + big score burst
-        targetSpeed = clamp(targetSpeed - 0.35, MIN_SPEED, MAX_SPEED);
-        speed = clamp(speed - 0.2, MIN_SPEED, MAX_SPEED);
+        targetSpeed = clamp(targetSpeed - 0.45, MIN_SPEED, MAX_SPEED);
+        speed = clamp(speed - 0.28, MIN_SPEED, MAX_SPEED);
         addScore(60);
         updateMult();
         sfx.coinGrass();
@@ -1150,13 +1151,36 @@
         const gx = ((i * 28 - groundOffset * 1.1) % (W + 40) + (W + 40)) % (W + 40) - 20;
         ctx.fillRect(gx, GROUND_Y + 8 + (i % 5) * 7, 10 + (i % 6), 2);
       }
+
+      // Realistic grass tufts scattered along the ground surface
+      const grassCol = phaseIdx >= 4 ? '#4d7c0f' : '#65a30d';
+      const grassColLight = phaseIdx >= 4 ? '#84cc16' : '#a3e635';
+      grassTufts.forEach((t) => {
+        const x = ((t.x - groundOffset) % (W + 60) + (W + 60)) % (W + 60) - 30;
+        const y = GROUND_Y - t.sink;
+        const sway = Math.sin(frame * 0.05 + t.p) * t.swayAmp;
+        ctx.save();
+        ctx.translate(x, y);
+        for (let b = 0; b < t.blades; b++) {
+          const bx = (b - (t.blades - 1) / 2) * t.spread;
+          const h = t.height * (0.8 + Math.sin(b * 1.7 + t.p) * 0.2);
+          ctx.strokeStyle = b % 2 === 0 ? grassCol : grassColLight;
+          ctx.lineWidth = 2;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(bx, 4);
+          ctx.quadraticCurveTo(bx + sway * 0.6, -h * 0.5, bx + sway, -h);
+          ctx.stroke();
+        }
+        ctx.restore();
+      });
     }
 
-    // ---------- BETTER DINO ----------
+    // ---------- REALISTIC DINO ----------
     function drawProperDino() {
       const ducking = dino.ducking && !dino.jumping;
       const baseH = ducking ? 34 : dino.h;
-      const baseW = ducking ? 70 : dino.w;
+      const baseW = ducking ? 72 : dino.w;
       const x = dino.x;
       const y = dino.y - baseH * dino.squash;
       const t = dino.animTimer;
@@ -1164,10 +1188,10 @@
       const bob = (!dino.jumping && !ducking && state === 'playing') ? Math.sin(t * 0.35) * 1.3 : 0;
       const grassOn = frame < grassUntil;
 
-      // Ground shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      // Ground contact shadow with soft blur feel
+      ctx.fillStyle = 'rgba(0,0,0,0.34)';
       ctx.beginPath();
-      ctx.ellipse(x + baseW * 0.42, dino.y + 4, ducking ? 30 : 22, 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + baseW * 0.4, dino.y + 4, ducking ? 32 : 23, 6.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
       // Shield ring
@@ -1192,14 +1216,37 @@
         ctx.fill();
       }
 
-      // Palette
-      let skin = '#4ade80', skinDark = '#16a34a', skinDeep = '#15803d', belly = '#bbf7d0', ridge = '#166534', outline = '#14532d';
+      // Realistic scaly skin palette (deeper, earthier greens + texture tones)
+      let skin = '#5eae4d', skinLite = '#7ec766', skinDark = '#3f7a34', skinDeep = '#2e5a26';
+      let belly = '#d9e8b0', ridge = '#274d20', outline = '#1c3818', scaleShade = 'rgba(28,56,24,0.25)';
       if (dino.dead) {
-        skin = '#64748b'; skinDark = '#475569'; skinDeep = '#334155'; belly = '#94a3b8'; ridge = '#1e293b'; outline = '#0f172a';
+        skin = '#6b7280'; skinLite = '#8a91a0'; skinDark = '#4b5563'; skinDeep = '#374151';
+        belly = '#9ca3af'; ridge = '#1f2937'; outline = '#111827'; scaleShade = 'rgba(17,24,39,0.25)';
       } else if (grassOn) {
-        skin = '#a3e635'; skinDark = '#65a30d'; skinDeep = '#4d7c0f'; belly = '#ecfccb'; ridge = '#3f6212'; outline = '#365314';
+        skin = '#84b02a'; skinLite = '#a3d13e'; skinDark = '#5c7d1d'; skinDeep = '#425c14';
+        belly = '#e7f4c4'; ridge = '#33470f'; outline = '#26350b'; scaleShade = 'rgba(38,53,11,0.25)';
       } else if (mult >= 4) {
-        skin = '#facc15'; skinDark = '#ca8a04'; skinDeep = '#a16207'; belly = '#fef9c3'; ridge = '#854d0e'; outline = '#713f12';
+        skin = '#c9a227'; skinLite = '#e2c34a'; skinDark = '#9c7d1c'; skinDeep = '#755d14';
+        belly = '#fdf3c7'; ridge = '#5c4a10'; outline = '#41340b'; scaleShade = 'rgba(65,52,11,0.25)';
+      }
+
+      function scalePattern(cx, cy, w, h, rows, cols) {
+        ctx.save();
+        ctx.fillStyle = scaleShade;
+        const cw = w / cols, ch = h / rows;
+        for (let r = 0; r < rows; r++) {
+          for (let cIdx = 0; cIdx < cols; cIdx++) {
+            const offset = (r % 2) * (cw / 2);
+            const sx = cx - w / 2 + cIdx * cw + offset;
+            const sy = cy - h / 2 + r * ch;
+            if (sx > cx - w / 2 - cw && sx < cx + w / 2) {
+              ctx.beginPath();
+              ctx.arc(sx, sy, cw * 0.28, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
+        ctx.restore();
       }
 
       ctx.save();
@@ -1207,170 +1254,241 @@
       ctx.translate(0, bob);
 
       if (ducking) {
-        // Tail
+        // Tail sweeping back
         ctx.fillStyle = skin;
         ctx.beginPath();
         ctx.moveTo(x + 6, y + 14);
-        ctx.quadraticCurveTo(x - 8, y + 4, x - 20, y + 12);
-        ctx.quadraticCurveTo(x - 10, y + 20, x + 8, y + 22);
+        ctx.quadraticCurveTo(x - 10, y + 2, x - 24, y + 10);
+        ctx.quadraticCurveTo(x - 12, y + 22, x + 8, y + 24);
         ctx.fill();
         ctx.fillStyle = ridge;
         ctx.beginPath();
-        ctx.moveTo(x - 12, y + 8); ctx.lineTo(x - 22, y + 4); ctx.lineTo(x - 14, y + 14); ctx.fill();
+        ctx.moveTo(x - 14, y + 6); ctx.lineTo(x - 26, y + 1); ctx.lineTo(x - 16, y + 13); ctx.fill();
 
-        // Body
+        // Long low body
         ctx.fillStyle = skin;
-        roundRectPath(ctx, x, y + 6, 50, 22, 9); ctx.fill();
+        roundRectPath(ctx, x, y + 6, 54, 24, 10); ctx.fill();
+        scalePattern(x + 27, y + 18, 50, 20, 2, 8);
+
         // Belly
         ctx.fillStyle = belly;
-        roundRectPath(ctx, x + 10, y + 14, 32, 10, 5); ctx.fill();
-        // Spots
-        ctx.fillStyle = 'rgba(20,83,45,0.18)';
-        ctx.beginPath(); ctx.arc(x + 18, y + 18, 2, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(x + 28, y + 19, 1.6, 0, Math.PI * 2); ctx.fill();
+        roundRectPath(ctx, x + 10, y + 15, 34, 11, 5); ctx.fill();
+        ctx.fillStyle = 'rgba(28,56,24,0.15)';
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.ellipse(x + 18 + i * 10, y + 20, 3, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+        }
 
-        // Head
+        // Head + jaw
         ctx.fillStyle = skin;
-        roundRectPath(ctx, x + 44, y, 26, 20, 8); ctx.fill();
-        roundRectPath(ctx, x + 62, y + 8, 11, 9, 4); ctx.fill();
-        // Jaw line
+        roundRectPath(ctx, x + 46, y, 28, 20, 8); ctx.fill();
+        roundRectPath(ctx, x + 66, y + 8, 12, 9, 3); ctx.fill();
         ctx.strokeStyle = outline;
-        ctx.globalAlpha = 0.35; ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.moveTo(x + 64, y + 13); ctx.lineTo(x + 70, y + 13); ctx.stroke();
+        ctx.globalAlpha = 0.4; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(x + 68, y + 13); ctx.lineTo(x + 76, y + 13); ctx.stroke();
         ctx.globalAlpha = 1;
 
         // Back plates
         ctx.fillStyle = skinDark;
         for (let i = 0; i < 5; i++) {
-          const sx = x + 8 + i * 9;
+          const sx = x + 8 + i * 10;
           ctx.beginPath();
-          ctx.moveTo(sx, y + 7); ctx.lineTo(sx + 4.5, y - 2); ctx.lineTo(sx + 9, y + 7); ctx.fill();
+          ctx.moveTo(sx, y + 7); ctx.lineTo(sx + 5, y - 3); ctx.lineTo(sx + 10, y + 7); ctx.fill();
         }
 
-        drawDinoEye(x + 56, y + 7, 3.4, outline);
+        drawDinoEye(x + 58, y + 7, 3.4, outline, grassOn);
 
-        // Legs
+        // Legs mid-stride
         ctx.fillStyle = skinDeep;
         if (leg === 0) {
-          roundRectPath(ctx, x + 14, y + 26, 13, 8, 3); ctx.fill();
-          roundRectPath(ctx, x + 38, y + 28, 13, 6, 3); ctx.fill();
+          roundRectPath(ctx, x + 16, y + 26, 13, 9, 4); ctx.fill();
+          roundRectPath(ctx, x + 40, y + 28, 13, 7, 4); ctx.fill();
         } else {
-          roundRectPath(ctx, x + 14, y + 28, 13, 6, 3); ctx.fill();
-          roundRectPath(ctx, x + 38, y + 26, 13, 8, 3); ctx.fill();
+          roundRectPath(ctx, x + 16, y + 28, 13, 7, 4); ctx.fill();
+          roundRectPath(ctx, x + 40, y + 26, 13, 9, 4); ctx.fill();
         }
         ctx.fillStyle = ridge;
-        ctx.fillRect(x + 14, y + 32, 4, 2);
-        ctx.fillRect(x + 38, y + 32, 4, 2);
+        ctx.fillRect(x + 16, y + 33, 4, 2);
+        ctx.fillRect(x + 40, y + 33, 4, 2);
       } else {
-        // Tail
+        // ===== STANDING / JUMP — full realistic pose =====
+
+        // Tail with taper + muscle segments
         ctx.fillStyle = skin;
         ctx.beginPath();
         ctx.moveTo(x + 10, y + 30);
-        ctx.quadraticCurveTo(x - 4, y + 22, x - 18, y + 16);
-        ctx.quadraticCurveTo(x - 24, y + 14, x - 20, y + 24);
-        ctx.quadraticCurveTo(x - 6, y + 32, x + 10, y + 36);
+        ctx.quadraticCurveTo(x - 6, y + 22, x - 20, y + 15);
+        ctx.quadraticCurveTo(x - 27, y + 12, x - 22, y + 24);
+        ctx.quadraticCurveTo(x - 8, y + 33, x + 10, y + 38);
         ctx.fill();
-        ctx.fillStyle = ridge;
+        ctx.fillStyle = skinDark;
         ctx.beginPath();
-        ctx.moveTo(x - 16, y + 15); ctx.lineTo(x - 26, y + 9); ctx.lineTo(x - 18, y + 22); ctx.fill();
+        ctx.moveTo(x - 18, y + 14); ctx.lineTo(x - 30, y + 8); ctx.lineTo(x - 20, y + 22); ctx.fill();
+        // tail segment lines
+        ctx.strokeStyle = outline; ctx.globalAlpha = 0.25; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x - 2, y + 26); ctx.lineTo(x - 8, y + 33); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - 10, y + 22); ctx.lineTo(x - 15, y + 29); ctx.stroke();
+        ctx.globalAlpha = 1;
 
-        // Back thigh
+        // Back thigh (thick, muscular)
         ctx.fillStyle = skinDeep;
-        roundRectPath(ctx, x + 22, y + 38, 15, 13, 6); ctx.fill();
+        roundRectPath(ctx, x + 20, y + 38, 17, 15, 6); ctx.fill();
 
-        // Torso
+        // Main torso
         ctx.fillStyle = skin;
-        roundRectPath(ctx, x + 4, y + 18, 32, 28, 11); ctx.fill();
+        roundRectPath(ctx, x + 3, y + 18, 34, 30, 12); ctx.fill();
+        scalePattern(x + 20, y + 33, 30, 26, 3, 6);
 
-        // Belly panel
+        // Belly panel with texture
         ctx.fillStyle = belly;
-        roundRectPath(ctx, x + 11, y + 28, 18, 14, 7); ctx.fill();
-        ctx.fillStyle = 'rgba(20,83,45,0.16)';
-        ctx.beginPath(); ctx.arc(x + 16, y + 34, 1.8, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(x + 22, y + 36, 1.5, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(x + 18, y + 39, 1.3, 0, Math.PI * 2); ctx.fill();
+        roundRectPath(ctx, x + 11, y + 29, 20, 16, 8); ctx.fill();
+        ctx.fillStyle = 'rgba(28,56,24,0.14)';
+        ctx.beginPath(); ctx.ellipse(x + 16, y + 35, 2.2, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 23, y + 37, 2, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 19, y + 41, 1.8, 1.3, 0, 0, Math.PI * 2); ctx.fill();
 
         // Neck
         ctx.fillStyle = skin;
-        roundRectPath(ctx, x + 22, y + 12, 17, 15, 7); ctx.fill();
+        roundRectPath(ctx, x + 23, y + 11, 18, 17, 7); ctx.fill();
+        scalePattern(x + 32, y + 19, 16, 14, 2, 4);
 
-        // Head
-        roundRectPath(ctx, x + 24, y + 1, 32, 26, 10); ctx.fill();
-        // Snout
-        roundRectPath(ctx, x + 48, y + 12, 13, 11, 5); ctx.fill();
+        // Head (elongated, more predator-like)
+        ctx.fillStyle = skin;
+        roundRectPath(ctx, x + 25, y, 35, 28, 11); ctx.fill();
+        // upper jaw / snout taper
+        ctx.beginPath();
+        ctx.moveTo(x + 55, y + 6);
+        ctx.quadraticCurveTo(x + 72, y + 10, x + 76, y + 20);
+        ctx.quadraticCurveTo(x + 65, y + 24, x + 52, y + 22);
+        ctx.closePath();
+        ctx.fill();
+        // lower jaw
         ctx.fillStyle = skinDark;
-        roundRectPath(ctx, x + 50, y + 18, 10, 5, 2); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + 54, y + 20);
+        ctx.quadraticCurveTo(x + 68, y + 24, x + 72, y + 30);
+        ctx.quadraticCurveTo(x + 60, y + 30, x + 50, y + 27);
+        ctx.closePath();
+        ctx.fill();
 
-        // Crest plates
+        // Crest plates along spine/head (irregular, natural sizes)
         ctx.fillStyle = skinDark;
-        [[x + 12, y + 18, 9], [x + 20, y + 14, 11], [x + 28, y + 10, 10], [x + 36, y + 2, 9]].forEach(([sx, sy, sh]) => {
+        [[x + 10, y + 20, 9], [x + 19, y + 15, 11], [x + 28, y + 10, 12], [x + 38, y + 3, 10], [x + 46, y - 4, 8]].forEach(([sx, sy, sh]) => {
           ctx.beginPath();
-          ctx.moveTo(sx, sy); ctx.lineTo(sx + 5.5, sy - sh); ctx.lineTo(sx + 11, sy + 1); ctx.fill();
+          ctx.moveTo(sx, sy);
+          ctx.quadraticCurveTo(sx + 3, sy - sh * 0.6, sx + 6, sy - sh);
+          ctx.quadraticCurveTo(sx + 9, sy - sh * 0.5, sx + 12, sy + 1);
+          ctx.closePath();
+          ctx.fill();
         });
 
-        // Cheek
-        if (!dino.dead) {
-          ctx.fillStyle = grassOn ? 'rgba(255,255,255,0.25)' : 'rgba(74,222,128,0.28)';
-          ctx.beginPath();
-          ctx.ellipse(x + 36, y + 17, 4.5, 2.8, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        // Cheek shading + jaw muscle bulge
+        ctx.fillStyle = skinDark;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.ellipse(x + 48, y + 18, 8, 6, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
 
-        drawDinoEye(x + 40, y + 11, 4.5, outline);
+        // Eye ridge (predator brow)
+        ctx.fillStyle = skinDeep;
+        ctx.beginPath();
+        ctx.moveTo(x + 36, y + 6);
+        ctx.quadraticCurveTo(x + 45, y + 2, x + 52, y + 8);
+        ctx.quadraticCurveTo(x + 44, y + 8, x + 36, y + 10);
+        ctx.closePath();
+        ctx.fill();
 
-        // Nostril + teeth
+        // Eye
+        drawDinoEye(x + 43, y + 13, 4.6, outline, grassOn);
+
+        // Nostril
         ctx.fillStyle = outline;
-        ctx.beginPath(); ctx.arc(x + 54, y + 15, 1.4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(x + 68, y + 17, 2, 1.4, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Teeth (more of them, sharper)
         if (!dino.dead) {
           ctx.fillStyle = '#f8fafc';
-          ctx.fillRect(x + 52, y + 20, 2.2, 2.2);
-          ctx.fillRect(x + 55.5, y + 20, 2.2, 2.2);
+          for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(x + 54 + i * 5, y + 24);
+            ctx.lineTo(x + 56 + i * 5, y + 29);
+            ctx.lineTo(x + 58 + i * 5, y + 24);
+            ctx.closePath();
+            ctx.fill();
+          }
         }
 
-        // Little arm
+        // Small forearm with claws
         ctx.fillStyle = skinDark;
-        roundRectPath(ctx, x + 16, y + 30, 11, 5, 2); ctx.fill();
-        ctx.fillRect(x + 25, y + 32, 3, 4);
-        ctx.fillRect(x + 28, y + 31, 3, 4);
+        roundRectPath(ctx, x + 16, y + 32, 12, 6, 3); ctx.fill();
+        ctx.fillStyle = skinDeep;
+        ctx.fillRect(x + 26, y + 35, 3, 5);
+        ctx.fillRect(x + 30, y + 33, 3, 5);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(x + 26, y + 39, 3, 2);
+        ctx.fillRect(x + 30, y + 37, 3, 2);
 
-        // Legs
+        // Legs — thick, muscular, textured
         ctx.fillStyle = skinDeep;
         if (dino.jumping) {
-          roundRectPath(ctx, x + 8, y + 42, 12, 12, 4); ctx.fill();
-          roundRectPath(ctx, x + 8, y + 52, 15, 5, 2); ctx.fill();
-          roundRectPath(ctx, x + 26, y + 42, 12, 10, 4); ctx.fill();
-          roundRectPath(ctx, x + 26, y + 50, 14, 5, 2); ctx.fill();
+          roundRectPath(ctx, x + 8, y + 42, 13, 14, 5); ctx.fill();
+          roundRectPath(ctx, x + 8, y + 54, 16, 6, 3); ctx.fill();
+          roundRectPath(ctx, x + 27, y + 42, 13, 11, 5); ctx.fill();
+          roundRectPath(ctx, x + 27, y + 51, 15, 6, 3); ctx.fill();
         } else if (leg === 0) {
-          roundRectPath(ctx, x + 8, y + 42, 12, 14, 4); ctx.fill();
-          roundRectPath(ctx, x + 8, y + 54, 15, 5, 2); ctx.fill();
-          roundRectPath(ctx, x + 26, y + 42, 12, 8, 4); ctx.fill();
-          roundRectPath(ctx, x + 26, y + 48, 14, 5, 2); ctx.fill();
+          roundRectPath(ctx, x + 8, y + 42, 13, 16, 5); ctx.fill();
+          roundRectPath(ctx, x + 8, y + 56, 16, 6, 3); ctx.fill();
+          roundRectPath(ctx, x + 27, y + 42, 13, 9, 5); ctx.fill();
+          roundRectPath(ctx, x + 27, y + 49, 15, 6, 3); ctx.fill();
         } else {
-          roundRectPath(ctx, x + 8, y + 42, 12, 8, 4); ctx.fill();
-          roundRectPath(ctx, x + 8, y + 48, 15, 5, 2); ctx.fill();
-          roundRectPath(ctx, x + 26, y + 42, 12, 14, 4); ctx.fill();
-          roundRectPath(ctx, x + 26, y + 54, 14, 5, 2); ctx.fill();
+          roundRectPath(ctx, x + 8, y + 42, 13, 9, 5); ctx.fill();
+          roundRectPath(ctx, x + 8, y + 49, 16, 6, 3); ctx.fill();
+          roundRectPath(ctx, x + 27, y + 42, 13, 16, 5); ctx.fill();
+          roundRectPath(ctx, x + 27, y + 56, 15, 6, 3); ctx.fill();
         }
+        // leg muscle highlight
+        ctx.fillStyle = skinLite;
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath(); ctx.ellipse(x + 14, y + 47, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 33, y + 47, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+
         // Claws
         ctx.fillStyle = ridge;
-        ctx.fillRect(x + 8, y + (dino.jumping ? 55 : 57), 3, 3);
-        ctx.fillRect(x + 12, y + (dino.jumping ? 55 : 57), 3, 3);
-        ctx.fillRect(x + 26, y + (dino.jumping ? 53 : 57), 3, 3);
-        ctx.fillRect(x + 30, y + (dino.jumping ? 53 : 57), 3, 3);
+        const clawY = dino.jumping ? 58 : 60;
+        ctx.fillRect(x + 8, y + clawY, 3.5, 4);
+        ctx.fillRect(x + 13, y + clawY, 3.5, 4);
+        ctx.fillRect(x + 18, y + clawY, 3.5, 4);
+        const clawY2 = dino.jumping ? 55 : 55;
+        ctx.fillRect(x + 27, y + (leg === 1 ? 60 : clawY2), 3.5, 4);
+        ctx.fillRect(x + 32, y + (leg === 1 ? 60 : clawY2), 3.5, 4);
+        ctx.fillRect(x + 37, y + (leg === 1 ? 60 : clawY2), 3.5, 4);
+
+        // Subtle rim light along the back (realistic sheen)
+        ctx.strokeStyle = skinLite;
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + 20);
+        ctx.quadraticCurveTo(x + 20, y + 8, x + 40, y + 4);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
 
         // Soft outline
         ctx.strokeStyle = outline;
         ctx.lineWidth = 1.3;
-        ctx.globalAlpha = 0.25;
-        roundRectPath(ctx, x + 4, y + 18, 32, 28, 11); ctx.stroke();
-        roundRectPath(ctx, x + 24, y + 1, 32, 26, 10); ctx.stroke();
+        ctx.globalAlpha = 0.22;
+        roundRectPath(ctx, x + 3, y + 18, 34, 30, 12); ctx.stroke();
+        roundRectPath(ctx, x + 25, y, 35, 28, 11); ctx.stroke();
         ctx.globalAlpha = 1;
       }
 
       ctx.restore();
     }
 
-    function drawDinoEye(ex, ey, r, outline) {
+    function drawDinoEye(ex, ey, r, outline, grassOn) {
       if (dino.dead) {
         ctx.strokeStyle = outline || '#0f172a'; ctx.lineWidth = 2.2;
         ctx.beginPath();
@@ -1382,22 +1500,25 @@
         ctx.strokeStyle = outline || '#0f172a'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(ex - r, ey); ctx.lineTo(ex + r, ey); ctx.stroke(); return;
       }
-      // White
-      ctx.fillStyle = '#fff';
+      // Sclera
+      ctx.fillStyle = '#fff8e7';
       ctx.beginPath(); ctx.arc(ex, ey, r, 0, Math.PI * 2); ctx.fill();
-      // Iris
-      ctx.fillStyle = frame < grassUntil ? '#3f6212' : '#14532d';
-      ctx.beginPath(); ctx.arc(ex + 0.9, ey + 0.4, r * 0.58, 0, Math.PI * 2); ctx.fill();
-      // Pupil
+      // Reptilian iris — vertical slit pupil for realism
+      ctx.fillStyle = grassOn ? '#3f5a12' : '#78350f';
+      ctx.beginPath(); ctx.arc(ex + 0.9, ey + 0.3, r * 0.62, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#0f172a';
-      ctx.beginPath(); ctx.arc(ex + 1.2, ey + 0.5, r * 0.32, 0, Math.PI * 2); ctx.fill();
+      ctx.save();
+      ctx.translate(ex + 1.1, ey + 0.4);
+      ctx.scale(0.35, 1);
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
       // Shine
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(ex + 1.9, ey - 1.3, r * 0.22, 0, Math.PI * 2); ctx.fill();
-      // Bottom lid shade
-      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      // Lower lid shade
+      ctx.fillStyle = 'rgba(0,0,0,0.1)';
       ctx.beginPath();
-      ctx.ellipse(ex, ey + r * 0.55, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.ellipse(ex, ey + r * 0.55, r * 0.9, r * 0.3, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -1475,10 +1596,8 @@
       ctx.scale(pulse, pulse);
 
       if (coin.kind === 'grass') {
-        // Rare ground grass pickup — tuft + jewel
         ctx.fillStyle = 'rgba(163,230,53,0.22)';
         ctx.beginPath(); ctx.ellipse(0, 8, 16, 6, 0, 0, Math.PI * 2); ctx.fill();
-        // blades
         ctx.fillStyle = '#65a30d';
         for (let i = -2; i <= 2; i++) {
           ctx.beginPath();
@@ -1489,7 +1608,6 @@
         ctx.fillStyle = '#a3e635';
         ctx.beginPath();
         ctx.moveTo(-3, 8); ctx.quadraticCurveTo(0, -10, 3, 8); ctx.fill();
-        // gem center
         ctx.fillStyle = c.glow;
         ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = c.outer;
@@ -1503,36 +1621,29 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('G', 0, 1);
-        // sparkles
         ctx.fillStyle = '#ecfccb';
         ctx.fillRect(-10, -8, 2, 2);
         ctx.fillRect(8, -4, 2, 2);
         ctx.fillRect(6, 7, 2, 2);
       } else {
-        // Bold readable coin
         ctx.fillStyle = c.glow;
         ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
-        // rim
         ctx.fillStyle = c.outer;
         ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = c.mid;
         ctx.beginPath(); ctx.arc(0, 0, 9.5, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = c.core;
         ctx.beginPath(); ctx.arc(0, 0, 6.2, 0, Math.PI * 2); ctx.fill();
-        // dark ring for contrast
         ctx.strokeStyle = 'rgba(0,0,0,0.22)';
         ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.stroke();
-        // letter
         ctx.fillStyle = c.text;
         ctx.font = 'bold 10px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(type.letter, 0, 1);
-        // shine
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.beginPath(); ctx.arc(-3.5, -3.5, 2.2, 0, Math.PI * 2); ctx.fill();
-        // label tag under coin
         ctx.fillStyle = 'rgba(2,6,23,0.55)';
         roundRectPath(ctx, -14, 13, 28, 10, 4); ctx.fill();
         ctx.fillStyle = c.outer;
@@ -1593,14 +1704,25 @@
           speed: 0.25 + Math.random() * 0.35, color: 'rgba(226,232,240,0.7)'
         });
       }
+      // Grass tufts scattered along the ground for a realistic desert-edge look
+      grassTufts = [];
+      for (let i = 0; i < 22; i++) {
+        grassTufts.push({
+          x: i * 45 + Math.random() * 30,
+          sink: rand(-2, 4),
+          blades: 3 + Math.floor(Math.random() * 3),
+          spread: rand(3, 5),
+          height: rand(10, 20),
+          swayAmp: rand(1, 3),
+          p: Math.random() * 10
+        });
+      }
     }
 
-    function pickCoinKind() {
-      // Yellow common, green uncommon, grass very rare
-      const r = Math.random();
-      if (r < 0.72) return 'slow';
-      if (r < 0.93) return 'shield';
-      return 'grass';
+    function cactusPalette() {
+      return pick([
+        { color: '#22c55e' }, { color: '#10b981' }, { color: '#84cc16' }
+      ]);
     }
 
     function spawnCactus(x, forceVariant) {
@@ -1660,12 +1782,18 @@
     function spawnCoinSafe(x, y, forceKind) {
       if (!canPlaceCoinAt(x)) return;
       const kind = forceKind || pickCoinKind();
-      // Grass is a rare ground pickup — sit low near ground
       const yy = kind === 'grass' ? GROUND_Y - rand(28, 42) : y;
       coins.push({
         x, y: yy, r: kind === 'grass' ? 14 : 13, p: Math.random() * 10, taken: false,
         kind
       });
+    }
+
+    function pickCoinKind() {
+      const r = Math.random();
+      if (r < 0.72) return 'slow';
+      if (r < 0.93) return 'shield';
+      return 'grass';
     }
 
     function spawnObstacle() {
@@ -1683,15 +1811,13 @@
         if (placed && Math.random() < p.twinChance) {
           spawnCactus(W + 42 + rand(105, 135), Math.floor(Math.random() * 4));
         }
-        // rare special pickups
         if (placed && Math.random() < 0.14 + phaseIdx * 0.02) {
           spawnCoinSafe(W + 42 + rand(145, 190), GROUND_Y - rand(80, 120), 'shield');
         }
-        // very rare ground grass power
         if (placed && Math.random() < 0.05 + phaseIdx * 0.01) {
           spawnCoinSafe(W + 42 + rand(160, 210), GROUND_Y - 36, 'grass');
         }
-        nextObstacleGap = rand(82, 135) * p.gapMul;
+        nextObstacleGap = rand(95, 150) * p.gapMul;
       } else if (roll < 0.5 + p.birdChance) {
         const birdX = W + 42 + 40;
         placed = !!spawnBird(birdX);
@@ -1701,18 +1827,19 @@
         if (placed && phaseIdx >= 3 && Math.random() < 0.25) {
           spawnBird(birdX + rand(130, 170), pick(['high', 'mid']));
         }
-        nextObstacleGap = rand(95, 150) * p.gapMul;
+        nextObstacleGap = rand(110, 165) * p.gapMul;
       } else {
         placed = !!spawnCactus(W + 42) || !!spawnRock(W + 42);
         if (placed && Math.random() < 0.48) {
           spawnCoinSafe(W + 42 + rand(80, 110), GROUND_Y - rand(75, 110));
         }
-        nextObstacleGap = rand(100, 155) * p.gapMul;
+        nextObstacleGap = rand(115, 170) * p.gapMul;
       }
 
-      if (!placed) nextObstacleGap = rand(35, 60);
-      if (phaseIdx >= 5) nextObstacleGap *= rand(0.9, 1.0);
-      nextObstacleGap = Math.max(48, nextObstacleGap);
+      if (!placed) nextObstacleGap = rand(50, 75);
+      if (phaseIdx >= 5) nextObstacleGap *= rand(0.92, 1.0);
+      if (phaseIdx === 0) nextObstacleGap = Math.max(nextObstacleGap, 110);
+      nextObstacleGap = Math.max(55, nextObstacleGap);
     }
 
     function resetGame() {
@@ -1721,9 +1848,11 @@
       speed = BASE_SPEED; targetSpeed = BASE_SPEED;
       frame = 0; runFrames = 0; groundOffset = 0;
       obstacles = []; particles = []; coins = []; floatTexts = [];
-      lastObstacleFrame = 0; nextObstacleGap = 110; shake = 0;
+      lastObstacleFrame = 0; nextObstacleGap = 125; shake = 0;
       phaseIdx = 0; lastMilestone = 0; shield = 0; grassUntil = 0;
       missionsDone = 0; clearedIds = new Set(); nextId = 1; dangerPulse = 0;
+      lastTs = 0; accumulator = 0;
+      uiAcc = 0; scoreAcc = 0; speedRampAcc = 0; dustAcc = 0; missionUiAcc = 0;
       dino.y = GROUND_Y; dino.vy = 0; dino.jumping = false; dino.ducking = false;
       dino.dead = false; dino.animTimer = 0; dino.squash = 1;
       dino.blinkTimer = 40 + Math.random() * 80; dino.eyeClosed = false;
@@ -1757,7 +1886,6 @@
       sfx.start();
       resetGame();
       state = 'playing';
-      // Clean start UI: hide all menu panels
       overlay.classList.add('hidden');
       endStats.style.display = 'none';
       startGuide.style.display = 'none';
@@ -1786,7 +1914,6 @@
       }
       overlayTitle.textContent = 'GAME OVER';
       overlaySub.textContent = currentPhase().name + ' · Missions ' + missionsDone;
-      // Game over: only stats + retry, no coin guide clutter
       startGuide.style.display = 'none';
       howtoBtn.style.display = 'none';
       document.getElementById('statScore').textContent = String(score);
@@ -1841,7 +1968,7 @@
       }
       if (combo > 0 && combo % 10 === 0) {
         showFloat('🔥 COMBO ' + combo + ' · x' + mult, '#86efac');
-        grassUntil = Math.max(grassUntil, frame + 60);
+        grassUntil = Math.max(grassUntil, frame + TARGET_FPS);
         vibe(20);
       }
     }
@@ -1877,7 +2004,7 @@
       return {
         x: dino.x + 6,
         y: dino.y - (ducking ? 34 : dino.h) + 6,
-        w: (ducking ? 70 : dino.w) - 14,
+        w: (ducking ? 72 : dino.w) - 14,
         h: (ducking ? 34 : dino.h) - 10
       };
     }
@@ -1907,8 +2034,18 @@
       }
     }
 
-    function update(dt) {
-      dino.blinkTimer--;
+    // ============================================================
+    // update() is the fixed-tick simulation step. It is ALWAYS called
+    // as if exactly 1/60th of a second has passed — regardless of the
+    // real display refresh rate. This is what makes gameplay speed
+    // identical on 60Hz, 90Hz, 120Hz and 144Hz screens.
+    // `easeMul` only softens the very start of a run (startup grace);
+    // it is not a per-frame delta-time multiplier.
+    // ============================================================
+    function update(easeMul) {
+      const s = 1; // one fixed simulation tick
+
+      dino.blinkTimer -= s;
       if (dino.blinkTimer <= 0) {
         dino.eyeClosed = true;
         if (dino.blinkTimer < -6) {
@@ -1919,13 +2056,15 @@
       dino.squash += (1 - dino.squash) * 0.15;
 
       if (state === 'start') {
-        dino.animTimer++;
+        dino.animTimer += s;
         groundOffset += 1.2;
         clouds.forEach((c) => { c.x -= c.speed; if (c.x < -80) c.x = W + 20; });
         return;
       }
       if (state === 'gameover') {
-        particles.forEach((p) => { p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.025; });
+        particles.forEach((p) => {
+          p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.025;
+        });
         particles = particles.filter((p) => p.life > 0);
         floatTexts.forEach((f) => { f.y += f.vy; f.life -= 0.03; });
         floatTexts = floatTexts.filter((f) => f.life > 0);
@@ -1933,21 +2072,27 @@
         return;
       }
 
-      frame++;
-      runFrames++;
-      dino.animTimer++;
+      frame += s;
+      runFrames += s;
+      dino.animTimer += s;
 
       const p = currentPhase();
-      if (frame % 85 === 0) targetSpeed = clamp(targetSpeed + p.speedAdd, MIN_SPEED, MAX_SPEED);
-      if (frame < grassUntil && frame % 120 === 0) targetSpeed = clamp(targetSpeed + 0.05, MIN_SPEED, MAX_SPEED);
-      speed += (targetSpeed - speed) * 0.045;
-      speed = clamp(speed, MIN_SPEED, MAX_SPEED);
-      if (frame % 8 === 0) {
-        updateSpeedUI();
-        updateMult();
+      const effSpeedAdd = p.speedAdd * easeMul;
+
+      speedRampAcc += s;
+      if (speedRampAcc >= 90) {
+        speedRampAcc = 0;
+        targetSpeed = clamp(targetSpeed + effSpeedAdd, MIN_SPEED, MAX_SPEED);
       }
 
-      if (frame % 3 === 0) {
+      speed += (targetSpeed - speed) * 0.045 * easeMul;
+      speed = clamp(speed, MIN_SPEED, MAX_SPEED);
+
+      uiAccTick();
+
+      scoreAcc += s;
+      if (scoreAcc >= 3) {
+        scoreAcc = 0;
         addScore(1);
         if (score > 0 && score % 500 === 0 && score !== lastMilestone) {
           lastMilestone = score;
@@ -1958,8 +2103,11 @@
       }
 
       if (shield > 0) {
-        shield--;
-        if (shield <= 0) shieldChip.style.display = 'none';
+        shield -= s;
+        if (shield <= 0) {
+          shield = 0;
+          shieldChip.style.display = 'none';
+        }
       }
 
       dino.vy += GRAVITY;
@@ -1969,13 +2117,21 @@
         dino.y = GROUND_Y; dino.vy = 0; dino.jumping = false;
       }
 
-      groundOffset += speed * dt;
-...
-c.x -= (c.speed + speed * 0.05) * dt;
-...
-o.x -= speed * (o.speedMult...) * dt;
-...
-c.x -= speed * dt;
+      const moveSpeed = speed * easeMul;
+      groundOffset += moveSpeed;
+      clouds.forEach((c) => {
+        c.x -= c.speed + moveSpeed * 0.05;
+        if (c.x < -80) { c.x = W + 30; c.y = 50 + Math.random() * 90; }
+      });
+
+      if (frame - lastObstacleFrame > nextObstacleGap) {
+        spawnObstacle();
+        lastObstacleFrame = frame;
+      }
+
+      obstacles.forEach((o) => { o.x -= moveSpeed * (o.speedMul || 1); });
+      obstacles = obstacles.filter((o) => o.x + o.w > -50);
+      coins.forEach((c) => { c.x -= moveSpeed; });
       coins = coins.filter((c) => c.x > -20 && !c.taken);
 
       const box = getDinoBox();
@@ -2035,7 +2191,9 @@ c.x -= speed * dt;
         if (!c.taken && collides(box, cb)) collectCoin(c);
       });
 
-      if (!dino.jumping && frame % 3 === 0) {
+      dustAcc += s;
+      if (!dino.jumping && dustAcc >= 3) {
+        dustAcc = 0;
         particles.push({
           x: dino.x + 6, y: GROUND_Y - 1,
           vx: -speed * 0.3, vy: -Math.random(),
@@ -2045,11 +2203,28 @@ c.x -= speed * dt;
         });
       }
 
-      particles.forEach((p) => { p.x += p.vx; p.y += p.vy; p.life -= 0.035; });
+      particles.forEach((p) => {
+        p.x += p.vx; p.y += p.vy; p.life -= 0.035;
+      });
       particles = particles.filter((p) => p.life > 0);
       floatTexts.forEach((f) => { f.y += f.vy; f.life -= 0.03; });
       floatTexts = floatTexts.filter((f) => f.life > 0);
-      if (frame % 15 === 0) updateMissionUI();
+
+      missionUiAcc += s;
+      if (missionUiAcc >= 15) {
+        missionUiAcc = 0;
+        updateMissionUI();
+      }
+    }
+
+    let uiAcc = 0, scoreAcc = 0, speedRampAcc = 0, dustAcc = 0, missionUiAcc = 0;
+    function uiAccTick() {
+      uiAcc++;
+      if (uiAcc >= 8) {
+        uiAcc = 0;
+        updateSpeedUI();
+        updateMult();
+      }
     }
 
     function draw() {
@@ -2078,57 +2253,49 @@ c.x -= speed * dt;
       if (shake > 0.4) ctx.restore();
     }
 
-    let lastTime = performance.now();
+    // ============================================================
+    // MAIN LOOP — fixed timestep with accumulator.
+    //
+    // requestAnimationFrame fires at whatever rate the display supports
+    // (60 / 90 / 120 / 144Hz...). We measure real elapsed time each
+    // callback and add it to an accumulator. We then run update() in
+    // fixed FIXED_DT_MS (16.667ms) chunks until the accumulator drains.
+    //
+    // Result: update() always runs at a constant 60 ticks/second no
+    // matter the device, so obstacle speed, jump height, gravity, coin
+    // timers etc. are perfectly consistent everywhere. draw() still
+    // runs every animation frame for maximum visual smoothness.
+    // ============================================================
+    function loop(ts) {
+      const now = ts || performance.now();
 
-function loop(now) {
-  let dt = (now - lastTime) / 16.67; // 16.67ms = 1 frame at 60fps, normalize
-  dt = Math.min(dt, 3); // safety cap (tab switch jaisa spike na aaye)
-  lastTime = now;
+      if (!lastTs) {
+        lastTs = now;
+        draw();
+        requestAnimationFrame(loop);
+        return;
+      }
 
-  update(dt);
-  draw();
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+      let frameDelta = now - lastTs;
+      lastTs = now;
 
-    function drawLogoDino() {
-      const c = logoCtx;
-      c.clearRect(0, 0, 100, 100);
-      // aura
-      c.fillStyle = 'rgba(74,222,128,0.16)';
-      c.beginPath(); c.arc(50, 54, 42, 0, Math.PI * 2); c.fill();
-      // tail
-      c.fillStyle = '#4ade80';
-      c.beginPath();
-      c.moveTo(24, 54); c.quadraticCurveTo(8, 44, 4, 34); c.quadraticCurveTo(0, 50, 20, 62); c.fill();
-      // body
-      roundRectPath(c, 22, 40, 38, 32, 12); c.fill();
-      c.fillStyle = '#bbf7d0';
-      roundRectPath(c, 30, 52, 20, 14, 6); c.fill();
-      // head
-      c.fillStyle = '#4ade80';
-      roundRectPath(c, 44, 18, 36, 30, 11); c.fill();
-      // crest
-      c.fillStyle = '#16a34a';
-      c.beginPath(); c.moveTo(30, 42); c.lineTo(36, 26); c.lineTo(42, 42); c.fill();
-      c.beginPath(); c.moveTo(40, 36); c.lineTo(47, 20); c.lineTo(54, 36); c.fill();
-      c.beginPath(); c.moveTo(54, 20); c.lineTo(60, 8); c.lineTo(66, 20); c.fill();
-      // eye
-      c.fillStyle = '#fff';
-      c.beginPath(); c.arc(68, 30, 6, 0, Math.PI * 2); c.fill();
-      c.fillStyle = '#14532d';
-      c.beginPath(); c.arc(69, 30.5, 3.2, 0, Math.PI * 2); c.fill();
-      c.fillStyle = '#0f172a';
-      c.beginPath(); c.arc(69.5, 31, 1.7, 0, Math.PI * 2); c.fill();
-      c.fillStyle = '#fff';
-      c.beginPath(); c.arc(70.3, 29, 1.2, 0, Math.PI * 2); c.fill();
-      // snout
-      c.fillStyle = '#4ade80';
-      roundRectPath(c, 72, 34, 12, 10, 4); c.fill();
-      // legs
-      c.fillStyle = '#15803d';
-      roundRectPath(c, 28, 70, 13, 16, 4); c.fill();
-      roundRectPath(c, 48, 70, 13, 12, 4); c.fill();
+      if (!isFinite(frameDelta) || frameDelta < 0) frameDelta = FIXED_DT_MS;
+      if (frameDelta > 250) frameDelta = 250; // clamp huge pauses (app resume, etc.)
+
+      accumulator += frameDelta;
+
+      let steps = 0;
+      while (accumulator >= FIXED_DT_MS && steps < MAX_STEPS_PER_FRAME) {
+        const startupEase = state === 'playing'
+          ? 0.55 + 0.45 * clamp(runFrames / (TARGET_FPS * STARTUP_GRACE_SEC), 0, 1)
+          : 1;
+        update(startupEase);
+        accumulator -= FIXED_DT_MS;
+        steps++;
+      }
+
+      draw();
+      requestAnimationFrame(loop);
     }
 
     function bindPad(el, onDown, onUp) {
@@ -2184,16 +2351,23 @@ requestAnimationFrame(loop);
 
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+    document.addEventListener('visibilitychange', () => {
+      // Reset timing refs when app resumes so we don't simulate a giant
+      // "catch up" jump after being backgrounded.
+      if (!document.hidden) {
+        lastTs = 0;
+        accumulator = 0;
+      }
+    });
 
     resize();
     resetGame();
     state = 'start';
-    drawLogoDino();
-    // First visit: auto show coin meaning popup
+
     if (!seenGuide) {
       setTimeout(() => openGuide(true), 350);
     }
-    loop();
+    requestAnimationFrame(loop);
 
     // PWA service worker
     if ('serviceWorker' in navigator) {
