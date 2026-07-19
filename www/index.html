@@ -1907,7 +1907,7 @@
       }
     }
 
-    function update() {
+    function update(dt) {
       dino.blinkTimer--;
       if (dino.blinkTimer <= 0) {
         dino.eyeClosed = true;
@@ -1969,20 +1969,13 @@
         dino.y = GROUND_Y; dino.vy = 0; dino.jumping = false;
       }
 
-      groundOffset += speed;
-      clouds.forEach((c) => {
-        c.x -= c.speed + speed * 0.05;
-        if (c.x < -80) { c.x = W + 30; c.y = 50 + Math.random() * 90; }
-      });
-
-      if (frame - lastObstacleFrame > nextObstacleGap) {
-        spawnObstacle();
-        lastObstacleFrame = frame;
-      }
-
-      obstacles.forEach((o) => { o.x -= speed * (o.speedMul || 1); });
-      obstacles = obstacles.filter((o) => o.x + o.w > -50);
-      coins.forEach((c) => { c.x -= speed; });
+      groundOffset += speed * dt;
+...
+c.x -= (c.speed + speed * 0.05) * dt;
+...
+o.x -= speed * (o.speedMult...) * dt;
+...
+c.x -= speed * dt;
       coins = coins.filter((c) => c.x > -20 && !c.taken);
 
       const box = getDinoBox();
@@ -2085,11 +2078,18 @@
       if (shake > 0.4) ctx.restore();
     }
 
-    function loop() {
-      update();
-      draw();
-      requestAnimationFrame(loop);
-    }
+    let lastTime = performance.now();
+
+function loop(now) {
+  let dt = (now - lastTime) / 16.67; // 16.67ms = 1 frame at 60fps, normalize
+  dt = Math.min(dt, 3); // safety cap (tab switch jaisa spike na aaye)
+  lastTime = now;
+
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 
     function drawLogoDino() {
       const c = logoCtx;
