@@ -11,5 +11,6 @@
     <allow-intent href="http://*/*" />
     <allow-intent href="https://*/*" />
     <platform name="android">
-    </platform>
+    <icon src="www/icon-512.png" />
+</platform>
 </widget>
