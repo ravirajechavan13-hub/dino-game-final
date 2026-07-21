@@ -533,41 +533,7 @@
     .grass-fx.on { opacity: 1; }
   </style>
 </head>
-<body>
-  [5:26 pm, 18/7/2026] raviraje: name: Build Android APK
-on: [push, workflow_dispatch]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install Cordova
-        run: npm install -g cordova
-
-      - name: Build APK
-        run: |
-          cordova platform add android
-          cordova build android --device
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: DinoGame-APK
-          path: platforms/android/app/build/outputs/apk/debug/app-debug.apk
-[12:53 pm, 21/7/2026] raviraje: <body>
+  <body>
   <style>
     #customSplash {
       position: fixed;
