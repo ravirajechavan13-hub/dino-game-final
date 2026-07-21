@@ -26,6 +26,12 @@
     <preference name="StatusBarOverlaysWebView" value="false" />
     <preference name="StatusBarBackgroundColor" value="#0f172a" />
 
+    <!--
+      Android 12+ native splash icon. This is the ONLY supported way
+      to set a splash icon on cordova-android 15 — the old <splash>
+      tags were removed in this version, which is why they were
+      deleted below.
+    -->
     <preference name="AndroidWindowSplashScreenAnimatedIcon" value="www/icon-512.png" />
     <preference name="AndroidWindowSplashScreenBackground" value="#0f172a" />
     <preference name="SplashMaintainAspectRatio" value="true" />
@@ -35,6 +41,10 @@
     <engine name="android" spec=">=10.1.0" />
 
     <platform name="android">
+        <!--
+          Legacy square launcher icon (used on older Android / as a
+          fallback). Uses the plain "src" attribute.
+        -->
         <icon density="ldpi"    src="www/icon-512.png" />
         <icon density="mdpi"    src="www/icon-512.png" />
         <icon density="hdpi"    src="www/icon-512.png" />
@@ -42,19 +52,21 @@
         <icon density="xxhdpi"  src="www/icon-512.png" />
         <icon density="xxxhdpi" src="www/icon-512.png" />
 
-        <icon density="ldpi"    src="www/icon-512.png" background="#0f172a" />
-        <icon density="mdpi"    src="www/icon-512.png" background="#0f172a" />
-        <icon density="hdpi"    src="www/icon-512.png" background="#0f172a" />
-        <icon density="xhdpi"   src="www/icon-512.png" background="#0f172a" />
-        <icon density="xxhdpi"  src="www/icon-512.png" background="#0f172a" />
-        <icon density="xxxhdpi" src="www/icon-512.png" background="#0f172a" />
-
-        <splash density="port-ldpi"    src="www/icon-512.png" />
-        <splash density="port-mdpi"    src="www/icon-512.png" />
-        <splash density="port-hdpi"    src="www/icon-512.png" />
-        <splash density="port-xhdpi"   src="www/icon-512.png" />
-        <splash density="port-xxhdpi"  src="www/icon-512.png" />
-        <splash density="port-xxxhdpi" src="www/icon-512.png" />
+        <!--
+          Adaptive icon (Android 8+) — THIS is what replaces the grey
+          Cordova robot. IMPORTANT: cordova-android requires the
+          attribute to be named "foreground" here, NOT "src". Using
+          "src" + "background" together (like we did before) throws:
+          "One of the following attributes are set but missing the
+          other for the density type ..." — that was the exact error
+          in the failed build.
+        -->
+        <icon density="ldpi"    foreground="www/icon-512.png" background="#0f172a" />
+        <icon density="mdpi"    foreground="www/icon-512.png" background="#0f172a" />
+        <icon density="hdpi"    foreground="www/icon-512.png" background="#0f172a" />
+        <icon density="xhdpi"   foreground="www/icon-512.png" background="#0f172a" />
+        <icon density="xxhdpi"  foreground="www/icon-512.png" background="#0f172a" />
+        <icon density="xxxhdpi" foreground="www/icon-512.png" background="#0f172a" />
 
         <preference name="AndroidXEnabled" value="true" />
     </platform>
