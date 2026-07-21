@@ -71,5 +71,4 @@
         <preference name="AndroidXEnabled" value="true" />
     </platform>
 
-    <plugin name="cordova-plugin-splashscreen" spec="^6.0.2" />
-</widget>
+    
